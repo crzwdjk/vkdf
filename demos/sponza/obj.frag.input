@@ -5,7 +5,7 @@
 const int MAX_MATERIALS_PER_MODEL = 32;
 const int MAX_MODELS = 128;
 
-INCLUDE(../../data/glsl/lighting.glsl)
+INCLUDE(../../data/glsl/lighting-float16.glsl)
 
 layout(std140, set = 1, binding = 1) uniform material_ubo
 {

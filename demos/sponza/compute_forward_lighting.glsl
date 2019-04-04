@@ -8,7 +8,7 @@
 
    // Take diffuse component from texture if needed
    if (mat.diffuse_tex_count > 0)
-      mat.diffuse = texture(tex_diffuse, in_uv);
+      mat.diffuse = f16vec4(texture(tex_diffuse, in_uv));
 
    // Ambient material (we just use the diffuse aspect for ambient)
    mat.ambient = mat.diffuse;
@@ -25,7 +25,7 @@
 
    // Take specular component from texture if needed
    if (mat.specular_tex_count > 0)
-      mat.specular = texture(tex_specular, in_uv);
+      mat.specular = f16vec4(texture(tex_specular, in_uv));
 
    // Do lighting computations (all done in eye space)
    LightColor color =
