@@ -32,6 +32,10 @@ enum {
    GBUFFER_LAST_FIXED_IDX
 };
 
+typedef enum {
+   VKDF_SCENE_DEFAULT = 0,
+   VKDF_SCENE_USE_FLOAT16,
+} VkdfSceneFlags;
 /* Fixed GBuffer slot formats
  *
  * We use a 16-bit format for eye-space normals instead of an 8-bit snorm format
@@ -726,6 +730,8 @@ struct _VkdfScene {
       VkdfModel *sphere;
       VkdfModel *cone;
    } model;
+   VkdfSceneFlags flags;
+
 };
 
 VkdfScene *
@@ -738,7 +744,8 @@ vkdf_scene_new(VkdfContext *ctx,
                glm::vec3 tile_size,
                uint32_t num_tile_levels,
                uint32_t cache_size,
-               uint32_t num_threads);
+               uint32_t num_threads,
+               VkdfSceneFlags flags = VKDF_SCENE_DEFAULT);
 
 void
 vkdf_scene_free(VkdfScene *s);

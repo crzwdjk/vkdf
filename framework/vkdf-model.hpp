@@ -6,6 +6,7 @@
 #include "vkdf-box.hpp"
 #include "vkdf-mesh.hpp"
 #include "vkdf-image.hpp"
+#include "vkdf-types.hpp"
 
 /* WARNING: changes to this struct need to be applied to lighting.glsl too */
 typedef struct {
@@ -22,6 +23,21 @@ typedef struct {
    float emission;
    uint32_t padding[0]; // So the size if 16-byte aligned
 } VkdfMaterial;
+
+typedef struct {
+   f16vec4 diffuse;
+   f16vec4 ambient;
+   f16vec4 specular;
+   float16_t shininess;
+   uint8_t diffuse_tex_count;
+   uint8_t normal_tex_count;
+   uint8_t specular_tex_count;
+   uint8_t opacity_tex_count;
+   float16_t reflectiveness;
+   float16_t roughness;
+   float16_t emission;
+   uint32_t padding[0]; // So the size if 16-byte aligned
+} VkdfMaterial16;
 
 typedef struct {
    char *diffuse_path;

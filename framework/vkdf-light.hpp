@@ -3,6 +3,7 @@
 
 #include "vkdf-deps.hpp"
 #include "vkdf-util.hpp"
+#include "vkdf-types.hpp"
 
 enum {
    VKDF_LIGHT_DIRECTIONAL = 0,
@@ -56,6 +57,43 @@ typedef struct {
    uint32_t cached;
    float padding[2];            // Keep this struct 16-byte aligned
 } VkdfLight;
+
+typedef struct {
+   // Common light attributes
+   glm::vec4 origin;      // .w = light type
+   f16vec4 diffuse;
+   f16vec4 ambient;
+   f16vec4 specular;
+   f16vec4 attenuation; // .x = constant, .y = linear, .z = quadratic
+
+   // Spotlights
+   struct {
+      struct {
+         f16vec4 rot;
+         f16vec4 dir;            // Computed from rotation
+      } priv;
+      f16vec4 angle_attenuation; // .x = constant, .y = linear, .z = quadratic
+      float16_t cutoff;          // cosine of the spotlight's cutoff angle (half of apeture angle)
+      float16_t cutoff_angle;    // spotlight's cutoff angle (half of aperture angle)
+      float padding;          // Keep this struct 16-byte aligned
+   } spot;
+
+   glm::mat4 view_matrix;       // View matrix for the light
+   glm::mat4 view_matrix_inv;
+
+   float16_t intensity;         // From 0 (no light) to 1 (full intensity)
+
+   float16_t volume_scale_cap;      // Maximum scale of the light volume (for light volume lighting)
+   float16_t volume_cutoff;         // Percentage of light being cutoff by the volume (0..1]
+   float16_t pad1;
+
+   uint32_t casts_shadows;
+   uint32_t dirty;              // Dirty state
+   uint32_t cached;
+   float padding[3];            // Keep this struct 16-byte aligned
+} VkdfLight16;
+
+
 
 VkdfLight *
 vkdf_light_new_directional(glm::vec4 dir,

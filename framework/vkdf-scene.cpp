@@ -345,13 +345,15 @@ vkdf_scene_new(VkdfContext *ctx,
                glm::vec3 tile_size,
                uint32_t num_tile_levels,
                uint32_t cache_size,
-               uint32_t num_threads)
+               uint32_t num_threads,
+               VkdfSceneFlags flags)
 {
    VkdfScene *s = g_new0(VkdfScene, 1);
 
    s->ctx = ctx;
 
    s->camera = camera;
+   s->flags = flags;
 
    assert(tile_size.x > 0.0f);
    assert(tile_size.z > 0.0f);
@@ -2515,6 +2517,59 @@ create_light_ubo(VkdfScene *s)
                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 }
 
+static void
+create_light_ubo_16bit(VkdfScene *s)
+{
+   /* FIXME: should pre-allocate for maximum number of lights */
+   uint32_t num_lights = s->lights.size();
+   assert(num_lights > 0);
+
+   const uint32_t light_data_size = ALIGN(sizeof(VkdfLight16), 16);
+
+   const uint32_t shadow_map_data_size =
+      ALIGN(sizeof(struct _shadow_map_ubo_data) , 16);
+
+   const uint32_t eye_space_data_size =
+      ALIGN(sizeof(struct _light_eye_space_ubo_data), 16);
+
+   const uint32_t clip_planes_data_size =
+      ALIGN(sizeof(struct _light_clip_planes_ubo_data), 16);
+
+   /* Since we pack multiple data segments into the UBO we need to make sure
+    * their offsets are properly aligned
+    */
+   VkDeviceSize ubo_offset_alignment =
+      s->ctx->phy_device_props.limits.minUniformBufferOffsetAlignment;
+
+   s->ubo.light.light_data_size = num_lights * light_data_size;
+   uint32_t buf_size = s->ubo.light.light_data_size;
+
+   s->ubo.light.shadow_map_data_offset = ALIGN(buf_size, ubo_offset_alignment);
+   s->ubo.light.shadow_map_data_size = num_lights * shadow_map_data_size;
+   buf_size = s->ubo.light.shadow_map_data_offset +
+              s->ubo.light.shadow_map_data_size;
+
+   if (s->compute_eye_space_light) {
+      s->ubo.light.eye_space_data_offset = ALIGN(buf_size, ubo_offset_alignment);
+      s->ubo.light.eye_space_data_size = num_lights * eye_space_data_size;
+      buf_size = s->ubo.light.eye_space_data_offset +
+                 s->ubo.light.eye_space_data_size;
+   }
+
+   s->ubo.light.clip_planes_data_offset = ALIGN(buf_size, ubo_offset_alignment);
+   s->ubo.light.clip_planes_data_size = num_lights * clip_planes_data_size;
+   buf_size = s->ubo.light.clip_planes_data_offset +
+              s->ubo.light.clip_planes_data_size;
+
+   s->ubo.light.size = buf_size;
+
+   s->ubo.light.buf = vkdf_create_buffer(s->ctx, 0,
+                                         s->ubo.light.size,
+                                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+}
+
 /**
  * Creates a UBO with the model matrices for each object that can cast
  * shadows (the ones we need to render to the shadow map).
@@ -2596,6 +2651,72 @@ create_dynamic_object_shadow_map_ubo(VkdfScene *s)
                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                          VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+}
+
+static float16_t pack_float16(float v) {
+  glm::vec2 v1 = glm::vec2(v, 0.0f);
+  return { (uint16_t)glm::packHalf2x16(v1) };
+}
+
+static f16vec4 pack_f16vec4(glm::vec4 v) {
+  glm::vec2 v1 = glm::vec2(v[0], v[1]);
+  glm::vec2 v2 = glm::vec2(v[2], v[3]);
+
+  return { glm::packHalf2x16(v1) | ((uint64_t)glm::packHalf2x16(v2) << 32) };
+}
+
+static void create_static_material_ubo_16bits(VkdfScene *s)
+{
+   // NOTE: this doesn't consider the case where we have repeated models,
+   // which could happen if different set-ids share the same model. It is
+   // fine though, since we don't handle the case of shared models when
+   // we set up the static object ubo either.
+   uint32_t num_models = g_list_length(s->models);
+   s->ubo.material.size = num_models * MAX_MATERIALS_PER_MODEL *
+                          ALIGN(sizeof(VkdfMaterial16), 16);
+   s->ubo.material.buf =
+      vkdf_create_buffer(s->ctx, 0,
+                         s->ubo.material.size,
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+   uint8_t *mem;
+   VkDeviceSize material_size = sizeof(VkdfMaterial16);
+   vkdf_memory_map(s->ctx, s->ubo.material.buf.mem,
+                   0, VK_WHOLE_SIZE, (void **) &mem);
+
+   uint32_t model_idx = 0;
+   GList *model_iter = s->models;
+   while (model_iter) {
+      VkdfModel *model = (VkdfModel *) model_iter->data;
+      VkDeviceSize offset =
+         model_idx * MAX_MATERIALS_PER_MODEL * ALIGN(sizeof(VkdfMaterial16), 16);
+      uint32_t num_materials = model->materials.size();
+      assert(num_materials <= MAX_MATERIALS_PER_MODEL);
+      for (uint32_t mat_idx = 0; mat_idx < num_materials; mat_idx++) {
+         VkdfMaterial *m = &model->materials[mat_idx];
+         VkdfMaterial16 m16;
+         m16.diffuse = pack_f16vec4(m->diffuse);
+         m16.ambient = pack_f16vec4(m->ambient);
+         m16.specular = pack_f16vec4(m->specular);
+         m16.shininess = pack_float16(m->shininess);
+         m16.diffuse_tex_count = m->diffuse_tex_count;
+         m16.normal_tex_count = m->diffuse_tex_count;
+         m16.specular_tex_count = m->specular_tex_count;
+         m16.opacity_tex_count = m->opacity_tex_count;
+         m16.reflectiveness = pack_float16(m->reflectiveness);
+         m16.roughness = pack_float16(m->roughness);
+         m16.emission = pack_float16(m->emission);
+
+         memcpy(mem + offset, &m16, material_size);
+         offset += ALIGN(material_size, 16);
+      }
+      model_iter = g_list_next(model_iter);
+      model_idx++;
+   }
+
+   vkdf_memory_unmap(s->ctx, s->ubo.material.buf.mem,
+                     s->ubo.material.buf.mem_props, 0, VK_WHOLE_SIZE);
 }
 
 static void
@@ -2702,7 +2823,11 @@ prepare_scene_objects(VkdfScene *s)
    }
 
    create_static_object_ubo(s);
-   create_static_material_ubo(s);
+   if (s->flags & VKDF_SCENE_USE_FLOAT16) {
+     create_static_material_ubo_16bits(s);
+   } else {
+     create_static_material_ubo(s);
+   }
 
    create_dynamic_object_ubo(s);
    create_dynamic_material_ubo(s);
@@ -3407,6 +3532,44 @@ scene_light_has_dirty_eye_space_data(VkdfSceneLight *sl, VkdfCamera *cam)
 }
 
 static void
+update_float16_light(VkdfScene *s, uint32_t i, VkdfLight *light)
+{
+   VkdfLight16 light_buf;
+   VkDeviceSize light_inst_size = ALIGN(sizeof(VkdfLight16), 16);
+
+   light_buf.origin = light->origin;
+   light_buf.diffuse = pack_f16vec4(light->diffuse);
+   light_buf.ambient = pack_f16vec4(light->ambient);
+   light_buf.specular = pack_f16vec4(light->specular);
+   light_buf.attenuation = pack_f16vec4(light->attenuation);
+
+   light_buf.spot.priv.rot = pack_f16vec4(light->spot.priv.rot);
+   light_buf.spot.priv.dir = pack_f16vec4(light->spot.priv.dir);
+   light_buf.spot.angle_attenuation = pack_f16vec4(light->spot.angle_attenuation);
+   light_buf.spot.cutoff = pack_float16(light->spot.cutoff);
+   light_buf.spot.cutoff_angle = pack_float16(light->spot.cutoff_angle);
+
+   light_buf.view_matrix = light->view_matrix;
+   light_buf.view_matrix_inv = light->view_matrix_inv;
+
+   light_buf.intensity = pack_float16(light->intensity);
+   light_buf.volume_scale_cap = pack_float16(light->volume_scale_cap);
+   light_buf.volume_cutoff = pack_float16(light->volume_cutoff);
+
+   light_buf.casts_shadows = light->casts_shadows;
+   light_buf.dirty = light->dirty;
+   light_buf.cached = light->cached;
+
+   vkCmdUpdateBuffer(s->cmd_buf.update_resources,
+                     s->ubo.light.buf.buf,
+                     i * light_inst_size, light_inst_size,
+                     &light_buf);
+
+
+
+}
+
+static void
 record_dirty_light_resource_updates(VkdfScene *s)
 {
    assert(s->lights_dirty);
@@ -3430,10 +3593,14 @@ record_dirty_light_resource_updates(VkdfScene *s)
       /* Base light data */
       if (scene_light_is_dirty(sl) || s->light_indices_dirty) {
          assert(light_inst_size < 64 * 1024);
-         vkCmdUpdateBuffer(s->cmd_buf.update_resources,
-                           s->ubo.light.buf.buf,
-                           i * light_inst_size, light_inst_size,
-                           sl->light);
+         if (s->flags & VKDF_SCENE_USE_FLOAT16) {
+            update_float16_light(s, i, sl->light);
+         } else {
+            vkCmdUpdateBuffer(s->cmd_buf.update_resources,
+                              s->ubo.light.buf.buf,
+                              i * light_inst_size, light_inst_size,
+                              sl->light);
+         }
       }
 
       /* Eye-space light data */
@@ -3923,7 +4090,11 @@ prepare_scene_lights(VkdfScene *s)
       return;
 
    // Create light source data UBO
-   create_light_ubo(s);
+   if (s->flags & VKDF_SCENE_USE_FLOAT16) {
+     create_light_ubo_16bit(s);
+   } else {
+     create_light_ubo(s);
+   }
 
    // Create static & dynamic shadow map object UBOs
    create_static_object_shadow_map_ubo(s);
@@ -6188,6 +6359,7 @@ prepare_scene_gbuffer_merge_command_buffer(VkdfScene *s)
 
    s->cmd_buf.gbuffer_merge = cmd_buf;
 }
+
 
 /**
  * Processess scene contents and sets things up for optimal rendering
