@@ -1248,7 +1248,7 @@ init_automatic_camera(SceneResources *res)
 }
 
 static void
-init_scene(SceneResources *res)
+init_scene(SceneResources *res, bool use_float16 = false)
 {
    VkdfContext *ctx = res->ctx;
 
@@ -1272,11 +1272,13 @@ init_scene(SceneResources *res)
    uint32_t fb_width = (uint32_t) (WIN_WIDTH * SUPER_SAMPLING_FACTOR);
    uint32_t fb_height = (uint32_t) (WIN_HEIGHT * SUPER_SAMPLING_FACTOR);
 
+   VkdfSceneFlags flags = use_float16 ? VKDF_SCENE_USE_FLOAT16
+                                      : VKDF_SCENE_DEFAULT;
    res->scene = vkdf_scene_new(ctx,
                                fb_width, fb_height,
                                res->camera,
                                scene_origin, scene_size, tile_size, 1,
-                               cache_size, 1);
+                               cache_size, 1, flags);
 
    VkFilter present_filter =
       SUPER_SAMPLING_FACTOR > 1.0f ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
@@ -2149,7 +2151,7 @@ init_cmd_bufs(SceneResources *res)
 }
 
 static void
-init_shaders(SceneResources *res)
+init_shaders(SceneResources *res, bool use_float16 = false)
 {
    // Depth prepass
    res->shaders.depth_prepass.vs =
@@ -2168,20 +2170,36 @@ init_shaders(SceneResources *res)
    // Deferred rendering
    res->shaders.obj_gbuffer.vs =
       vkdf_create_shader_module(res->ctx, "obj.deferred.vert.spv");
-   res->shaders.obj_gbuffer.fs =
-      vkdf_create_shader_module(res->ctx, "obj.deferred.frag.spv");
-   res->shaders.obj_gbuffer.fs_opacity =
-      vkdf_create_shader_module(res->ctx, "obj_opacity.deferred.frag.spv");
+   if (use_float16) {
+      res->shaders.obj_gbuffer.fs =
+         vkdf_create_shader_module(res->ctx, "obj.deferred-float16.frag.spv");
+      res->shaders.obj_gbuffer.fs_opacity =
+         vkdf_create_shader_module(res->ctx, "obj_opacity.deferred-float16.frag.spv");
 
-   res->shaders.gbuffer_merge.vs =
-      vkdf_create_shader_module(res->ctx, "gbuffer-merge.vert.spv");
-   res->shaders.gbuffer_merge.fs =
-      vkdf_create_shader_module(res->ctx, "gbuffer-merge.frag.spv");
+      res->shaders.gbuffer_merge.vs =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge.vert.spv");
+      res->shaders.gbuffer_merge.fs =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge-float16.frag.spv");
+   } else {
+      res->shaders.obj_gbuffer.fs =
+         vkdf_create_shader_module(res->ctx, "obj.deferred.frag.spv");
+      res->shaders.obj_gbuffer.fs_opacity =
+         vkdf_create_shader_module(res->ctx, "obj_opacity.deferred.frag.spv");
 
+      res->shaders.gbuffer_merge.vs =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge.vert.spv");
+      res->shaders.gbuffer_merge.fs =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge.frag.spv");
+   }
+   
    // SSAO (deferred)
-   res->shaders.gbuffer_merge.fs_ssao =
-      vkdf_create_shader_module(res->ctx, "gbuffer-merge.ssao.frag.spv");
-
+   if (use_float16) {
+      res->shaders.gbuffer_merge.fs_ssao =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge-float16.ssao.frag.spv");
+   } else {
+      res->shaders.gbuffer_merge.fs_ssao =
+         vkdf_create_shader_module(res->ctx, "gbuffer-merge.ssao.frag.spv");
+   }
    // Debug
    if (SHOW_DEBUG_TILE) {
       res->debug.shaders.vs =
@@ -2544,7 +2562,7 @@ init_debug_tile_resources(SceneResources *res)
 
 
 static void
-init_resources(VkdfContext *ctx, SceneResources *res)
+init_resources(VkdfContext *ctx, SceneResources *res, bool use_float16 = false)
 {
    memset(res, 0, sizeof(SceneResources));
 
@@ -2552,11 +2570,11 @@ init_resources(VkdfContext *ctx, SceneResources *res)
 
    init_descriptor_pools(res);
    init_cmd_bufs(res);
-   init_scene(res);
+   init_scene(res, use_float16);
    init_meshes(res);
    init_objects(res);
    init_ubos(res);
-   init_shaders(res);
+   init_shaders(res, use_float16);
 
    /* We need to prepare the scene before we build the pipelines, since these
     * will reference and bind resources provided by the scene
@@ -2774,17 +2792,28 @@ cleanup_resources(VkdfContext *ctx, SceneResources *res)
    vkdf_camera_free(ctx, res->camera);
 }
 
+
 int
-main()
+main(int argc, char **argv)
 {
    VkdfContext ctx;
    SceneResources resources;
 
+   bool use_float16 = false;
+   if (argc > 1) {
+      if (strcmp(argv[1], "-float16") == 0) {
+         use_float16 = true;
+      } else {
+         fprintf(stderr, "usage: sponza [-float16]\n");
+         return 1;
+      }
+   }
+
    vkdf_init(&ctx, WIN_WIDTH, WIN_HEIGHT, WIN_FULLSCREEN, false, false);
    vkdf_platform_mouse_enable_relative_mode(&ctx.platform);
    vkdf_set_framerate_target(&ctx, FRAMERATE_TARGET);
-
-   init_resources(&ctx, &resources);
+  
+   init_resources(&ctx, &resources, use_float16);
 
    vkdf_scene_event_loop_run(resources.scene);
 
