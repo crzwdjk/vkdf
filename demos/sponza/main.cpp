@@ -3,12 +3,12 @@
 // ================================= CONFIG ===================================
 
 /* Window resolution */
-const float      WIN_WIDTH                 = 1024.0f;
-const float      WIN_HEIGHT                = 768.0f;
-const bool       WIN_FULLSCREEN            = false;
+const float      WIN_WIDTH                 = 1920.0f;
+const float      WIN_HEIGHT                = 1080.0f;
+const bool       WIN_FULLSCREEN            = true;
 
 /* Framerate target */
-const float      FRAMERATE_TARGET          = 30.0f;
+const float      FRAMERATE_TARGET          = 60.0f;
 
 /* Sponza flag mesh */
 const bool       SHOW_SPONZA_FLAG_MESH     = false;
@@ -34,7 +34,7 @@ const float      MAX_ANISOTROPY            = 16.0f; // Min=0.0 (disabled)
 const bool       ENABLE_SHADOWS            = true;
 const uint32_t   SHADOW_MAP_SIZE           = 4096;
 const int32_t    SHADOW_MAP_SKIP_FRAMES    = -1;    // N < 0: never update, N >= 0: skip N frames
-const uint32_t   SHADOW_MAP_PCF_SIZE       = 2;     // Min=1 (disabled)
+const uint32_t   SHADOW_MAP_PCF_SIZE       = 1;     // Min=1 (disabled)
 const uint32_t   SHADOW_MAP_CONST_BIAS     = 1.0f;
 const uint32_t   SHADOW_MAP_SLOPE_BIAS     = 2.0f;
 
@@ -63,7 +63,7 @@ const glm::vec4  SUN_SPECULAR              = glm::vec4(3.0f, 3.0f, 3.0f, 1.0f);
 const glm::vec4  SUN_AMBIENT               = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
 
 /* Screen Space Reflections (SSR) */
-const bool       ENABLE_SSR                = true;
+const bool       ENABLE_SSR                = false;
 const float      SSR_REFLECTION_STRENGTH   = 0.1f;  // Min > 0.0, Max=1.0
 const int        SSR_REFLECTION_ROUGHNESS  = 0;     // Min = 0
 const int32_t    SSR_MAX_SAMPLES           = 32;
@@ -75,7 +75,7 @@ const float      SSR_MAX_REFLECTION_DIST   = 0.7f;  // Min > 0.0
 const float      SUPER_SAMPLING_FACTOR     = 1.0f;  // Min=1.0 (disabled)
 
 /* Antialiasing (FXAA) */
-const bool       ENABLE_FXAA               = true;
+const bool       ENABLE_FXAA               = false;
 const float      FXAA_LUMA_MIN             = 0.1f;    // Min > 0.0, Max=1.0
 const float      FXAA_LUMA_RANGE_MIN       = 0.1312f; // Min > 0.0, Max=1.0
 const float      FXAA_SUBPX_AA             = 0.5f;    // Min=0.0 (disabled)
