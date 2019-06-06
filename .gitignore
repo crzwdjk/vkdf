@@ -39,12 +39,16 @@ demos/scenelight/floor.frag
 demos/scenelight/obj.frag
 demos/shadow/shader.frag
 demos/sponza/gbuffer-merge.frag
+demos/sponza/gbuffer-merge-float16.frag
 demos/sponza/gbuffer-merge.ssao.frag
+demos/sponza/gbuffer-merge-float16.ssao.frag
 demos/sponza/obj.deferred.frag
+demos/sponza/obj.deferred-float16.frag
 demos/sponza/obj.deferred.vert
 demos/sponza/obj.frag
 demos/sponza/obj.vert
 demos/sponza/obj_opacity.deferred.frag
+demos/sponza/obj_opacity.deferred-float16.frag
 demos/sponza/obj_opacity.frag
 demos/pbr/pbr
 demos/pbr/shader.frag

@@ -20,94 +20,76 @@ BUILT_SOURCES = \
     obj.deferred.vert.spv \
     obj.deferred.frag \
     obj.deferred.frag.spv \
+    obj.deferred-float16.frag \
+    obj.deferred-float16.frag.spv \
     obj_opacity.deferred.frag \
     obj_opacity.deferred.frag.spv \
+    obj_opacity.deferred-float16.frag \
+    obj_opacity.deferred-float16.frag.spv \
     gbuffer-merge.vert.spv \
     gbuffer-merge.frag \
     gbuffer-merge.frag.spv \
+    gbuffer-merge-float16.frag \
+    gbuffer-merge-float16.frag.spv \
     gbuffer-merge.ssao.frag \
     gbuffer-merge.ssao.frag.spv \
+    gbuffer-merge-float16.ssao.frag \
+    gbuffer-merge-float16.ssao.frag.spv \
     debug-tile.vert.spv \
     debug-tile.frag.spv
 
 CLEANFILES = \
     $(BUILT_SOURCES)
 
-# Depth pre-pass
-obj.depthprepass.vert.spv: obj.depthprepass.vert
-	$(top_srcdir)/$(GLSLANG) -V obj.depthprepass.vert -o obj.depthprepass.vert.spv
+LIGHTING_GLSL = ../../data/glsl/lighting.glsl
+UTIL_GLSL = ../../data/glsl/util.glsl
+LIGHTING_FLOAT16_GLSL = ../../data/glsl/lighting-float16.glsl
 
-obj.depthprepass.opacity.vert.spv: obj.depthprepass.opacity.vert
-	$(top_srcdir)/$(GLSLANG) -V obj.depthprepass.opacity.vert -o obj.depthprepass.opacity.vert.spv
+%.frag.spv: %.frag
+	$(top_srcdir)/$(GLSLANG) -V $< -o $@
 
-obj.depthprepass.opacity.frag.spv: obj.depthprepass.opacity.frag
-	$(top_srcdir)/$(GLSLANG) -V obj.depthprepass.opacity.frag -o obj.depthprepass.opacity.frag.spv
+%.vert.spv: %.vert
+	$(top_srcdir)/$(GLSLANG) -V $< -o $@
 
+%.vert: %.vert.input
+	python $(top_srcdir)/scripts/fixup-glsl.py $< $@
+
+%.frag: %.frag.input
+	python $(top_srcdir)/scripts/fixup-glsl.py $< $@
 
 # Forward shading
-obj.vert: obj.vert.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj.vert.input obj.vert
+obj.vert: obj.vert.input $(LIGTHING_GLSL)
 
-obj.vert.spv: obj.vert
-	$(top_srcdir)/$(GLSLANG) -V obj.vert -o obj.vert.spv
-
-obj.frag: obj.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj.frag.input obj.frag
-
-obj.frag.spv: obj.frag
-	$(top_srcdir)/$(GLSLANG) -V obj.frag -o obj.frag.spv
+obj.frag: obj.frag.input $(LIGHTING_GLSL) compute_forward_lighting.glsl
 
 obj_opacity.frag: obj_opacity.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj_opacity.frag.input obj_opacity.frag
-
-obj_opacity.frag.spv: obj_opacity.frag
-	$(top_srcdir)/$(GLSLANG) -V obj_opacity.frag -o obj_opacity.frag.spv
-
 
 # Deferred shading
-obj.deferred.vert: obj.deferred.vert.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj.deferred.vert.input obj.deferred.vert
+obj.deferred.vert: obj.deferred.vert.input $(LIGHTING_GLSL)
 
-obj.deferred.vert.spv: obj.deferred.vert
-	$(top_srcdir)/$(GLSLANG) -V obj.deferred.vert -o obj.deferred.vert.spv
+obj.deferred.frag: obj.deferred.frag.input $(LIGHTING_GLSL) compute_gbuffer.glsl
 
-obj.deferred.frag: obj.deferred.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj.deferred.frag.input obj.deferred.frag
+obj.deferred-float16.frag: obj.deferred-float16.frag.input \
+    $(LIGHTING_FLOAT16_GLSL) compute_gbuffer_float16.glsl
 
-obj.deferred.frag.spv: obj.deferred.frag
-	$(top_srcdir)/$(GLSLANG) -V obj.deferred.frag -o obj.deferred.frag.spv
+obj_opacity.deferred.frag: obj_opacity.deferred.frag.input $(LIGHTING_GLSL) \
+    compute_gbuffer.glsl
 
-obj_opacity.deferred.frag: obj_opacity.deferred.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py obj_opacity.deferred.frag.input obj_opacity.deferred.frag
+obj_opacity.deferred.frag: obj_opacity.deferred.frag.input \
+    $(LIGHTING_FLOAT16_GLSL) compute_gbuffer_float16.glsl
 
-obj_opacity.deferred.frag.spv: obj_opacity.deferred.frag
-	$(top_srcdir)/$(GLSLANG) -V obj_opacity.deferred.frag -o obj_opacity.deferred.frag.spv
+gbuffer-merge.frag: gbuffer-merge.frag.input $(LIGHTING_GLSL) \
+    $(UTIL_GLSL) compute_deferred_lighting.glsl
 
-gbuffer-merge.vert.spv: gbuffer-merge.vert
-	$(top_srcdir)/$(GLSLANG) -V gbuffer-merge.vert -o gbuffer-merge.vert.spv
-
-gbuffer-merge.frag: gbuffer-merge.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py gbuffer-merge.frag.input gbuffer-merge.frag
-
-gbuffer-merge.frag.spv: gbuffer-merge.frag
-	$(top_srcdir)/$(GLSLANG) -V gbuffer-merge.frag -o gbuffer-merge.frag.spv
-
+gbuffer-merge-float16.frag: gbuffer-merge-float16.frag.input \
+    $(LIGHTING_FLOAT16_GLSL) compute_deferred_lighting.glsl
 
 # SSAO (deferred)
+gbuffer-merge.ssao.frag: gbuffer-merge.ssao.frag.input $(LIGHTING_GLSL) \
+    $(UTIL_GLSL) compute_deferred_lighting.glsl
 
-gbuffer-merge.ssao.frag: gbuffer-merge.ssao.frag.input
-	python $(top_srcdir)/scripts/fixup-glsl.py gbuffer-merge.ssao.frag.input gbuffer-merge.ssao.frag
-
-gbuffer-merge.ssao.frag.spv: gbuffer-merge.ssao.frag
-	$(top_srcdir)/$(GLSLANG) -V gbuffer-merge.ssao.frag -o gbuffer-merge.ssao.frag.spv
-
-
-# Debug
-debug-tile.vert.spv: debug-tile.vert
-	$(top_srcdir)/$(GLSLANG) -V debug-tile.vert -o debug-tile.vert.spv
-
-debug-tile.frag.spv: debug-tile.frag
-	$(top_srcdir)/$(GLSLANG) -V debug-tile.frag -o debug-tile.frag.spv
+gbuffer-merge-float16.ssao.frag: gbuffer-merge-float16.ssao.frag.input \
+    $(LIGHTING_GLSL) $(UTIL_GLSL) compute_deferred_lighting_float16.glsl
 
 sponza_SOURCES = \
     main.cpp
